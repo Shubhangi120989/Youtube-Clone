@@ -12,7 +12,7 @@ export const verifyJWT=asyncHandler(async(req,res,next)=>{
      if(!token){
          throw new ApiError(401,"Unauthorized request")
      }
-     //verify kro ki token sahi h na by verifying
+     //verify kro ki token sahi h na by verifying(getting the unencrypted raw token)
      const decodedToken=jwt.verify(token,process.env.ACCESS_TOKEN_SECRET)
   
      //jab user model m access token generate kr rhe the tab id ko _id krke field banayi thi
