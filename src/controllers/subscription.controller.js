@@ -148,7 +148,8 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
                         fullName:1,
                         username:1,
                         avatar:1,
-                        _id:1
+                        _id:1,
+                        email:1
                     }
                 }
             ]

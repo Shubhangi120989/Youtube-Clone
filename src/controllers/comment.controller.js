@@ -152,7 +152,7 @@ const deleteComment = asyncHandler(async (req, res) => {
     // TODO: delete a comment
     const {commentId}=req.params
     const userId=req.user?._id;
-    const comment= await Comment.getById(commentId)
+    const comment= await Comment.findById(commentId)
 
     if(!userId){
         throw new ApiError(400,"Not logged in")

@@ -105,7 +105,7 @@ const getChannelStats = asyncHandler(async (req, res) => {
             $lookup:{
                 from:"likes",
                 localField:"_id",
-                foreignField:"_video",
+                foreignField:"video",
                 as:"likes"
             }
         },{
@@ -212,6 +212,51 @@ const getChannelVideos = asyncHandler(async (req, res) => {
         {
             $match:{
                 owner: new mongoose.Types.ObjectId(user._id)
+            }
+        },
+        {
+            $lookup:{
+                from:"users",
+                localField:"owner",
+                foreignField:"_id",
+                as:"owner",
+                pipeline:[
+                    {
+                        $project:{
+                            username:1,
+                            _id:1,
+                            fullName:1,
+                            avatar:1
+                        }
+                    }
+                ]
+            }
+
+        },{
+            $addFields:{
+                owner:{
+                    $first:"$owner"
+                },
+                ageInDays: {
+                    $divide: [
+                      { $subtract: [new Date(), "$createdAt"] },
+                      1000 * 60 * 60 * 24
+                    ]
+                  }
+
+            }
+        },
+        {
+            $project:{
+                thumbnail:1,
+                _id:1,
+                views:1,
+                createdAt:1,
+                owner:1,
+                title:1,
+                ageInDays:1,
+                description:1
+                
             }
         }
     ])

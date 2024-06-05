@@ -30,7 +30,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
                         $project:{
                             username:1,
                             _id:1,
-                            fullName:1
+                            fullName:1,
+                            avatar:1
                         }
                     }
                 ]
@@ -64,8 +65,65 @@ const getAllVideos = asyncHandler(async (req, res) => {
         }
     ]),options)
     console.log(videoPage)
+    // if(req.query.search){
+    //     const result=videoPage.filter(video=>)
+    // }
 
     return res.status(200).json(new ApiResponse(200,videoPage,'all the videos fetched successfully'))
+})
+const getVideoBySearch=asyncHandler(async(req,res)=>{
+    const videos=await Video.aggregate([
+        {
+            $lookup:{
+                from:"users",
+                localField:"owner",
+                foreignField:"_id",
+                as:"owner",
+                pipeline:[
+                    {
+                        $project:{
+                            username:1,
+                            _id:1,
+                            fullName:1,
+                            avatar:1
+                        }
+                    }
+                ]
+            }
+
+        },{
+            $addFields:{
+                owner:{
+                    $first:"$owner"
+                },
+                ageInDays: {
+                    $divide: [
+                      { $subtract: [new Date(), "$createdAt"] },
+                      1000 * 60 * 60 * 24
+                    ]
+                  }
+
+            }
+        },
+        {
+            $project:{
+                thumbnail:1,
+                _id:1,
+                views:1,
+                createdAt:1,
+                owner:1,
+                title:1,
+                ageInDays:1
+                
+            }
+        }
+    ])
+    const searchedVideos=videos.filter(video=>video.title.includes(req.query.search))
+
+    // console.log(searchedVideos)
+    return res
+    .status(200)
+    .json(new ApiResponse(200,searchedVideos,"searched Video fetched"))
 })
 const getVideoDuration = async (publicId) => {
     try {
@@ -151,11 +209,15 @@ const getVideoById = asyncHandler(async (req, res) => {
     if(!user){
         throw new ApiError(400,"User must be logged in")
     }
-    
-    if(!user.watchHistory.includes(video._id)){
-        user.watchHistory.push(video._id)
-        await user.save({ validateBeforeSave: false })
-    }
+    await User.findByIdAndUpdate(
+        userId,
+        { $pull: { watchHistory: video._id } }
+      );
+    await User.findByIdAndUpdate(
+        userId,
+        { $push: { watchHistory: { $each: [video._id], $position: 0 } } },
+        { new: true }
+      );
     const videoDetails= await Video.aggregate([
         {
             $match:{
@@ -304,6 +366,7 @@ const updateVideo = asyncHandler(async (req, res) => {
         throw new ApiError(400,"No update info given")
     }
     if(newTitle){
+        console.log(newTitle)
         const existingVideoTitle=await Video.findOne({title:newTitle})
         if(existingVideoTitle){
             throw new ApiError(400,"Video with given title already exists")
@@ -422,4 +485,4 @@ const deleteVideo=asyncHandler(async(req,res)=>{
 
 })
 
-export {publishAVideo,getVideoById,updateVideo,togglePublishStatus,deleteVideo,getAllVideos}
+export {publishAVideo,getVideoById,updateVideo,togglePublishStatus,deleteVideo,getAllVideos,getVideoBySearch}

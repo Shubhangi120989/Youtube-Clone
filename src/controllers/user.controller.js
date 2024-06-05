@@ -21,6 +21,9 @@ const registerUser=asyncHandler(async(req,res)=>{
     //req.body se we are getting all the info from the frontend
     const {fullName,email,username,password}=req.body;
     console.log("email" ,email)
+    // console.log(username)
+    // console.log(fullName)
+    // console.log(password)
 
     //validation
     if(fullName===""){
@@ -231,8 +234,9 @@ const loginUser = asyncHandler(async (req, res) =>{
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
 
     const options = {
-        httpOnly: true,
-        secure: true
+        httpOnly: true, // Makes the cookie inaccessible to JavaScript (prevents XSS)
+        secure: process.env.NODE_ENV === 'production', // Ensures cookie is sent only over HTTPS
+        sameSite: 'Lax', // Controls if the cookie should be sent with cross-site requests
     }
 
     return res
@@ -521,64 +525,137 @@ const getUserChannelProfile=asyncHandler(async(req,res)=>{
 const getWatchHistory=asyncHandler(async(req,res)=>{
     //user._id m string milti h pr jab usse mongoose m use krte h tob vo automatically original id m convert krke use krta
     //but aggregate method ke andar mongoose does not work directly code jata h toh hume string se original object m convert krna pdega
-    const user=await User.aggregate([
-        {
-            //getting the user
-            $match:{
-                //converting to id object from the string
-                _id: new mongoose.Types.ObjectId(req.user?._id)
-            }
-        },
-        {
-            $lookup:{
-                from:"videos",
-                localField:"watchHistory",
-                foreignField:"_id",
-                as:"watchHistory",
-                //to implement nested lookup, so that we get the owner detail (which is a user) also
-                pipeline:[
-                    //ab hum videos ke andar h
-                    {
-                        $lookup:{
-                        from:"users",
-                        localField:"owner",
-                        foreignField:"_id",
-                        as:"owner",
-                        //isme se sirf owner ke kuch details hi chahiye so further pipline laga rhe
-                        pipeline:[
-                            {
-                                $project:{
-                                    fullName:1,
-                                    username:1,
-                                    avatar:1
-                                }
-                            },//for convienience isme owner ka ek array hoka jisme first index m owner ka object hoga
-                            //so rather we will add a new field of the same name (overwriting) jisme directly owner object daalenge
+    // const user=await User.aggregate([
+    //     {
+    //         //getting the user
+    //         $match:{
+    //             //converting to id object from the string
+    //             _id: new mongoose.Types.ObjectId(req.user?._id)
+    //         }
+    //     },
+    //     {
+    //         $lookup:{
+    //             from:"videos",
+    //             localField:"watchHistory",
+    //             foreignField:"_id",
+    //             as:"watchHistory",
+    //             //to implement nested lookup, so that we get the owner detail (which is a user) also
+    //             pipeline:[
+    //                 //ab hum videos ke andar h
+    //                 {
+    //                     $lookup:{
+    //                     from:"users",
+    //                     localField:"owner",
+    //                     foreignField:"_id",
+    //                     as:"owner",
+    //                     //isme se sirf owner ke kuch details hi chahiye so further pipline laga rhe
+    //                     pipeline:[
+    //                         {
+    //                             $project:{
+    //                                 fullName:1,
+    //                                 username:1,
+    //                                 avatar:1
+    //                             }
+    //                         },//for convienience isme owner ka ek array hoka jisme first index m owner ka object hoga
+    //                         //so rather we will add a new field of the same name (overwriting) jisme directly owner object daalenge
                             
 
-                        ]
+    //                     ]
 
-                    }
-                },{
-                    $addFields:{
-                        owner:{
-                            //mtlb first value of the array owner field
-                            $first:"$owner"
-                        }
-                    }
+    //                 }
+    //             },{
+    //                 $addFields:{
+    //                     owner:{
+    //                         //mtlb first value of the array owner field
+    //                         $first:"$owner"
+    //                     },
+    //                     ageInDays:{
+    //                         $divide: [
+    //                             { $subtract: [new Date(), "$createdAt"] },
+    //                             1000 * 60 * 60 * 24
+    //                           ]
+    //                     }
+    //                 }
 
-                }
-                ]
-            }
+    //             }
+    //             ]
+    //         }
+    //     },
+    //     // {
+    //     //     $project:{
+
+    //     //     }
+    //     // }
+
+    // ])
+    //to get in same sequence as in database
+    const user = await User.aggregate([
+        {
+          $match: {
+            _id: new mongoose.Types.ObjectId(req.user?._id)
+          }
         },
-        // {
-        //     $project:{
-
-        //     }
-        // }
-
-    ])
-
+        {
+          $lookup: {
+            from: "videos",
+            let: { watchHistory: "$watchHistory" },
+            pipeline: [
+              { 
+                $match: { 
+                  $expr: { 
+                    $in: ["$_id", "$$watchHistory"] 
+                  } 
+                } 
+              },
+              {
+                $lookup: {
+                  from: "users",
+                  localField: "owner",
+                  foreignField: "_id",
+                  as: "owner",
+                  pipeline: [
+                    {
+                      $project: {
+                        fullName: 1,
+                        username: 1,
+                        avatar: 1
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                $addFields: {
+                  owner: { $first: "$owner" },
+                  ageInDays: {
+                    $divide: [
+                      { $subtract: [new Date(), "$createdAt"] },
+                      1000 * 60 * 60 * 24
+                    ]
+                  }
+                }
+              }
+            ],
+            as: "watchHistoryDetails"
+          }
+        },
+        {
+          $project: {
+            watchHistory: {
+              $map: {
+                input: "$watchHistory",
+                as: "id",
+                in: {
+                  $arrayElemAt: [
+                    "$watchHistoryDetails",
+                    { $indexOfArray: ["$watchHistoryDetails._id", "$$id"] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]);
 
     //user will be an array jisme first value kaam ki hoti
 
